@@ -100,3 +100,26 @@ Provide basic account management.
 ## 9. Initial Scope
 
 These wireframes describe the planned interface, not a completed implementation. Authentication, database integration, and live dashboard data will be implemented in later stages.
+
+## 10. Dashboard Design Decisions
+
+### Navigation
+- Use a left sidebar for the main navigation.
+- Include Dashboard, My Applications, Skill Gap Analysis, My Skills, and Settings.
+
+### Theme
+- Use a dark theme across the application.
+- Maintain readable text, clear contrast, and consistent styling.
+
+### Dashboard Components
+- Summary cards: Total Applications, Applied, Interviews, Offers.
+- Application Status Chart: Wishlist, Applied, Assessment, Interview, Offer, Rejected.
+- Recent Applications Table: show the latest applications and their statuses.
+
+### Responsive Layout
+- Support desktop and mobile screen sizes.
+- Keep navigation and dashboard components usable on smaller screens.
+
+### Data Accuracy
+- Display real application data from the database once backend integration is implemented.
+- Do not use illustrative sample numbers as actual user data.
