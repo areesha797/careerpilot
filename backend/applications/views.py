@@ -15,3 +15,11 @@ class JobApplicationListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+
+class JobApplicationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = JobApplicationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return JobApplication.objects.filter(user=self.request.user)

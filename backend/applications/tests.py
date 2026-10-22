@@ -27,6 +27,19 @@ class JobApplicationAPITests(APITestCase):
             "status": "applied",
         }
 
+    def create_application(self, user=None, **overrides):
+        data = {
+            "company_name": "Test Company",
+            "job_title": "Software Engineer",
+            "status": "applied",
+        }
+        data.update(overrides)
+
+        return JobApplication.objects.create(
+            user=user or self.user,
+            **data,
+        )
+
     def test_unauthenticated_user_cannot_access_applications(self):
         response = self.client.get(self.url)
 
@@ -73,16 +86,13 @@ class JobApplicationAPITests(APITestCase):
         self.assertEqual(application.user, self.user)
 
     def test_user_can_only_see_own_applications(self):
-        JobApplication.objects.create(
+        self.create_application(
             user=self.user,
             company_name="My Company",
-            job_title="Python Developer",
-            status="applied",
         )
-        JobApplication.objects.create(
+        self.create_application(
             user=self.other_user,
             company_name="Other Company",
-            job_title="Frontend Developer",
             status="interview",
         )
 
@@ -101,14 +111,11 @@ class JobApplicationAPITests(APITestCase):
         )
 
     def test_authenticated_user_can_list_own_applications(self):
-        JobApplication.objects.create(
-            user=self.user,
+        self.create_application(
             company_name="Company One",
             job_title="Python Developer",
-            status="applied",
         )
-        JobApplication.objects.create(
-            user=self.user,
+        self.create_application(
             company_name="Company Two",
             job_title="Backend Developer",
             status="interview",
@@ -126,4 +133,114 @@ class JobApplicationAPITests(APITestCase):
         self.assertEqual(
             {item["company_name"] for item in response.data},
             {"Company One", "Company Two"},
+        )
+
+    def test_authenticated_user_can_retrieve_application(self):
+        application = self.create_application()
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f"{self.url}{application.id}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            response.data["company_name"],
+            "Test Company",
+        )
+
+    def test_unauthenticated_user_cannot_retrieve_application(self):
+        application = self.create_application()
+
+        response = self.client.get(
+            f"{self.url}{application.id}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+    def test_authenticated_user_can_update_application(self):
+        application = self.create_application()
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.patch(
+            f"{self.url}{application.id}/",
+            {"status": "interview"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        application.refresh_from_db()
+        self.assertEqual(application.status, "interview")
+
+    def test_authenticated_user_can_delete_application(self):
+        application = self.create_application()
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete(
+            f"{self.url}{application.id}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_204_NO_CONTENT,
+        )
+        self.assertFalse(
+            JobApplication.objects.filter(id=application.id).exists()
+        )
+
+    def test_user_cannot_retrieve_another_users_application(self):
+        application = self.create_application(user=self.other_user)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.get(
+            f"{self.url}{application.id}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_user_cannot_update_another_users_application(self):
+        application = self.create_application(user=self.other_user)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.patch(
+            f"{self.url}{application.id}/",
+            {"status": "rejected"},
+            format="json",
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+        application.refresh_from_db()
+        self.assertEqual(application.status, "applied")
+
+    def test_user_cannot_delete_another_users_application(self):
+        application = self.create_application(user=self.other_user)
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.delete(
+            f"{self.url}{application.id}/"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+        self.assertTrue(
+            JobApplication.objects.filter(id=application.id).exists()
         )
