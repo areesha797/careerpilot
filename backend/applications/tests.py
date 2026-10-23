@@ -244,3 +244,69 @@ class JobApplicationAPITests(APITestCase):
         self.assertTrue(
             JobApplication.objects.filter(id=application.id).exists()
         )
+
+class LoginAPITests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="login_user",
+            password="TestPass123!",
+        )
+        self.url = "/api/auth/login/"
+
+    def test_login_with_valid_credentials_creates_session(self):
+        response = self.client.post(
+            self.url,
+            {
+                "username": "login_user",
+                "password": "TestPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "login_user")
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_login_with_invalid_password_fails(self):
+        response = self.client.post(
+            self.url,
+            {
+                "username": "login_user",
+                "password": "WrongPassword!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(
+            response.data["detail"],
+            "Invalid username or password.",
+        )
+
+    def test_login_without_credentials_fails(self):
+        response = self.client.post(
+            self.url,
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_session_login_allows_access_to_applications(self):
+        response = self.client.post(
+            self.url,
+            {
+                "username": "login_user",
+                "password": "TestPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        applications_response = self.client.get("/api/applications/")
+
+        self.assertEqual(
+            applications_response.status_code,
+            status.HTTP_200_OK,
+        )
