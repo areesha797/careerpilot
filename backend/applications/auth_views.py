@@ -1,11 +1,15 @@
 
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import authenticate, login, logout
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
+from django.middleware.csrf import get_token
 
 
+@method_decorator(csrf_protect, name="dispatch")
 class LoginView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -47,3 +51,28 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        if not request.user.is_authenticated:
+            return Response(
+                {"detail": "You are not logged in."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        logout(request)
+
+        return Response(
+            {"detail": "Logout successful."},
+            status=status.HTTP_200_OK,
+        )
+
+class CSRFTokenView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        token = get_token(request)
+        return Response({"csrfToken": token})

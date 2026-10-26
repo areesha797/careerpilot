@@ -1,8 +1,7 @@
 
 from django.contrib.auth import get_user_model
 from rest_framework import status
-from rest_framework.test import APITestCase
-
+from rest_framework.test import APIClient, APITestCase
 from .models import JobApplication
 
 
@@ -310,3 +309,102 @@ class LoginAPITests(APITestCase):
             applications_response.status_code,
             status.HTTP_200_OK,
         )
+
+
+class LogoutAPITests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="logout_user",
+            password="TestPass123!",
+        )
+        self.login_url = "/api/auth/login/"
+        self.logout_url = "/api/auth/logout/"
+        self.applications_url = "/api/applications/"
+
+    def test_authenticated_user_can_logout(self):
+        self.client.force_login(self.user)
+
+        response = self.client.post(self.logout_url, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["detail"],
+            "Logout successful.",
+        )
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_unauthenticated_user_cannot_logout(self):
+        response = self.client.post(self.logout_url, format="json")
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_401_UNAUTHORIZED,
+        )
+
+    def test_logged_out_user_cannot_access_applications(self):
+        self.client.force_login(self.user)
+
+        logout_response = self.client.post(
+            self.logout_url,
+            format="json",
+        )
+
+        self.assertEqual(
+            logout_response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        applications_response = self.client.get(self.applications_url)
+
+        self.assertEqual(
+            applications_response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+
+class CSRFProtectionTests(APITestCase):
+    def setUp(self):
+        self.client = APIClient(enforce_csrf_checks=True)
+        self.user = User.objects.create_user(
+            username="csrf_user",
+            password="TestPass123!",
+        )
+        self.csrf_url = "/api/auth/csrf/"
+        self.login_url = "/api/auth/login/"
+
+    def test_csrf_endpoint_returns_token_and_cookie(self):
+        response = self.client.get(self.csrf_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("csrfToken", response.data)
+        self.assertIn("csrftoken", response.cookies)
+
+    def test_login_without_csrf_token_is_rejected(self):
+        response = self.client.post(
+            self.login_url,
+            {
+                "username": "csrf_user",
+                "password": "TestPass123!",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_login_with_valid_csrf_token_succeeds(self):
+        csrf_response = self.client.get(self.csrf_url)
+        csrf_token = csrf_response.data["csrfToken"]
+
+        response = self.client.post(
+            self.login_url,
+            {
+                "username": "csrf_user",
+                "password": "TestPass123!",
+            },
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["username"], "csrf_user")
+        self.assertIn("_auth_user_id", self.client.session)
