@@ -1,11 +1,12 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   IconButton,
   InputAdornment,
@@ -30,75 +31,168 @@ import {
   WorkOutlineRounded,
 } from "@mui/icons-material";
 
+import { apiRequest } from "@/lib/api";
+import type { ApplicationStatus, JobApplication } from "@/lib/types";
+
 const navigation = [
-  { label: "Dashboard", icon: DashboardRounded, active: true },
-  { label: "My Applications", icon: WorkOutlineRounded, active: false },
-  { label: "Saved Jobs", icon: BookmarkBorderRounded, active: false },
-  { label: "Skill Insights", icon: AssessmentRounded, active: false },
+  { label: "Dashboard", icon: DashboardRounded },
+  { label: "My Applications", icon: WorkOutlineRounded },
+  { label: "Saved Jobs", icon: BookmarkBorderRounded },
+  { label: "Skill Insights", icon: AssessmentRounded },
 ];
 
-const demoApplications = [
-  {
-    company: "Systems Limited",
-    initials: "SL",
-    color: "#b8c7ff",
-    role: "Frontend Developer",
-    location: "Islamabad, Pakistan",
-    status: "Interview",
-    date: "Oct 24, 2026",
+const statusStyles: Record<
+  ApplicationStatus,
+  { label: string; color: string; background: string }
+> = {
+  wishlist: {
+    label: "Wishlist",
+    color: "#c7b8fa",
+    background: "rgba(164, 139, 245, 0.12)",
   },
-  {
-    company: "Netsol Technologies",
-    initials: "NT",
-    color: "#b5ead7",
-    role: "Software Engineer",
-    location: "Lahore, Pakistan",
-    status: "Applied",
-    date: "Oct 22, 2026",
+  applied: {
+    label: "Applied",
+    color: "#9fc2ff",
+    background: "rgba(89, 145, 255, 0.13)",
   },
-  {
-    company: "Contour Software",
-    initials: "CS",
-    color: "#f4d3a1",
-    role: "Associate Developer",
-    location: "Islamabad, Pakistan",
-    status: "Assessment",
-    date: "Oct 20, 2026",
+  assessment: {
+    label: "Assessment",
+    color: "#e9c18a",
+    background: "rgba(230, 170, 83, 0.13)",
   },
-  {
-    company: "S&P Global",
-    initials: "SP",
-    color: "#e8c7fa",
-    role: "Data Analyst",
-    location: "Islamabad, Pakistan",
-    status: "Wishlist",
-    date: "Oct 18, 2026",
+  interview: {
+    label: "Interview",
+    color: "#7ee2ba",
+    background: "rgba(53, 191, 139, 0.12)",
   },
-];
-
-const statusStyles: Record<string, { color: string; background: string }> = {
-  Interview: { color: "#7ee2ba", background: "rgba(53, 191, 139, 0.12)" },
-  Applied: { color: "#9fc2ff", background: "rgba(89, 145, 255, 0.13)" },
-  Assessment: { color: "#e9c18a", background: "rgba(230, 170, 83, 0.13)" },
-  Wishlist: { color: "#c7b8fa", background: "rgba(164, 139, 245, 0.13)" },
+  offer: {
+    label: "Offer",
+    color: "#7ee2ba",
+    background: "rgba(53, 191, 139, 0.18)",
+  },
+  rejected: {
+    label: "Rejected",
+    color: "#f49b9b",
+    background: "rgba(244, 100, 100, 0.12)",
+  },
 };
+
+const companyColors = [
+  "#b8c7ff",
+  "#b5ead7",
+  "#f4d3a1",
+  "#e8c7fa",
+  "#f2b9c8",
+];
+
+function formatDate(dateString: string | null) {
+  if (!dateString) return "Not specified";
+
+  const date = new Date(dateString);
+
+  if (Number.isNaN(date.getTime())) return "Not specified";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
 
 export default function Home() {
   const [search, setSearch] = useState("");
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [statusFilter, setStatusFilter] = useState("All");
 
-  const filteredApplications = demoApplications.filter((application) => {
-    const matchesSearch =
-      `${application.company} ${application.role} ${application.location}`
+  const [applications, setApplications] = useState<JobApplication[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    async function loadApplications() {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await apiRequest<JobApplication[]>(
+          "/api/applications/",
+        );
+
+        if (isActive) {
+          setApplications(data);
+        }
+      } catch (err) {
+        if (isActive) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not load applications.",
+          );
+        }
+      } finally {
+        if (isActive) {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadApplications();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const filteredApplications = useMemo(() => {
+    return applications.filter((application) => {
+      const matchesSearch = [
+        application.company_name,
+        application.job_title,
+        application.location,
+      ]
+        .join(" ")
         .toLowerCase()
         .includes(search.toLowerCase());
 
-    const matchesStatus =
-      statusFilter === "All" || application.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "All" || application.status === statusFilter;
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
+  }, [applications, search, statusFilter]);
+
+  const statistics = [
+    {
+      label: "Total applications",
+      value: applications.length,
+      note: "Across all statuses",
+      icon: <WorkOutlineRounded />,
+      accent: "blue",
+    },
+    {
+      label: "Interviews",
+      value: applications.filter((app) => app.status === "interview").length,
+      note: "Interview opportunities",
+      icon: <CalendarMonthRounded />,
+      accent: "green",
+    },
+    {
+      label: "Assessments",
+      value: applications.filter((app) => app.status === "assessment").length,
+      note: "Pending or completed",
+      icon: <AssessmentRounded />,
+      accent: "amber",
+    },
+    {
+      label: "Offers received",
+      value: applications.filter((app) => app.status === "offer").length,
+      note: "Offers tracked",
+      icon: <AutoAwesomeRounded />,
+      accent: "purple",
+    },
+  ];
 
   return (
     <Box className="dashboard-shell">
@@ -115,7 +209,7 @@ export default function Home() {
         <Typography className="nav-caption">WORKSPACE</Typography>
 
         <Stack spacing={0.6}>
-         {navigation.map(({ label, icon: Icon }) => (
+          {navigation.map(({ label, icon: Icon }) => (
             <Button
               key={label}
               className={`nav-item ${
@@ -127,7 +221,7 @@ export default function Home() {
             >
               {label}
               {label === "My Applications" && (
-                <span className="nav-count">{demoApplications.length}</span>
+                <span className="nav-count">{applications.length}</span>
               )}
             </Button>
           ))}
@@ -138,7 +232,9 @@ export default function Home() {
         <Typography className="nav-caption">TOOLS</Typography>
 
         <Button
-          className={`nav-item ${activeNav === "Calendar" ? "nav-item-active" : ""}`}
+          className={`nav-item ${
+            activeNav === "Calendar" ? "nav-item-active" : ""
+          }`}
           startIcon={<CalendarMonthRounded />}
           onClick={() => setActiveNav("Calendar")}
           fullWidth
@@ -147,7 +243,9 @@ export default function Home() {
         </Button>
 
         <Button
-          className={`nav-item ${activeNav === "Insights" ? "nav-item-active" : ""}`}
+          className={`nav-item ${
+            activeNav === "Insights" ? "nav-item-active" : ""
+          }`}
           startIcon={<AppsRounded />}
           onClick={() => setActiveNav("Insights")}
           fullWidth
@@ -213,7 +311,10 @@ export default function Home() {
                 },
               }}
             />
-            <IconButton className="notification-button" aria-label="Notifications">
+            <IconButton
+              className="notification-button"
+              aria-label="Notifications"
+            >
               <NotificationsNoneRounded />
               <span className="notification-dot" />
             </IconButton>
@@ -223,7 +324,9 @@ export default function Home() {
         <Box className="page-content">
           <Box className="welcome-row">
             <Box>
-              <Typography className="eyebrow">YOUR CAREER, IN FOCUS</Typography>
+              <Typography className="eyebrow">
+                YOUR CAREER, IN FOCUS
+              </Typography>
               <Typography component="h1" className="page-title">
                 Good things take <span>progress.</span>
               </Typography>
@@ -237,50 +340,34 @@ export default function Home() {
               startIcon={<AddRounded />}
               className="primary-button"
               onClick={() =>
-                window.alert("Application form will be connected in a future step.")
+                window.alert(
+                  "Application form will be connected in a future step.",
+                )
               }
             >
               Add application
             </Button>
           </Box>
 
-          <Box className="demo-notice">
-            <AutoAwesomeRounded />
-            <Typography>
-              Preview mode — the applications below are illustrative demo data,
-              not real account records.
-            </Typography>
-          </Box>
+          {error && (
+            <Box className="demo-notice" role="alert">
+              <Typography>
+                Could not load applications: {error}
+              </Typography>
+            </Box>
+          )}
 
           <Box className="stats-grid">
-            <StatCard
-              label="Total applications"
-              value="24"
-              note="Illustrative preview"
-              icon={<WorkOutlineRounded />}
-              accent="blue"
-            />
-            <StatCard
-              label="Interviews"
-              value="05"
-              note="Illustrative preview"
-              icon={<CalendarMonthRounded />}
-              accent="green"
-            />
-            <StatCard
-              label="Assessments"
-              value="03"
-              note="Illustrative preview"
-              icon={<AssessmentRounded />}
-              accent="amber"
-            />
-            <StatCard
-              label="Offers received"
-              value="02"
-              note="Illustrative preview"
-              icon={<AutoAwesomeRounded />}
-              accent="purple"
-            />
+            {statistics.map((stat) => (
+              <StatCard
+                key={stat.label}
+                label={stat.label}
+                value={loading ? "—" : String(stat.value)}
+                note={loading ? "Loading..." : stat.note}
+                icon={stat.icon}
+                accent={stat.accent}
+              />
+            ))}
           </Box>
 
           <Paper elevation={0} className="applications-panel">
@@ -298,7 +385,9 @@ export default function Home() {
                 className="filter-button"
                 startIcon={<FilterListRounded />}
                 onClick={() =>
-                  setStatusFilter((current) => (current === "All" ? "Applied" : "All"))
+                  setStatusFilter((current) =>
+                    current === "All" ? "applied" : "All",
+                  )
                 }
               >
                 {statusFilter === "All" ? "Filter" : "Applied only"}
@@ -314,56 +403,90 @@ export default function Home() {
                   <Box />
                 </Box>
 
-                {filteredApplications.map((application) => (
-                  <Box className="table-row" key={application.company}>
-                    <Box className="company-cell">
-                      <Box
-                        className="company-logo"
-                        sx={{ backgroundColor: application.color }}
-                      >
-                        {application.initials}
-                      </Box>
-                      <Box>
-                        <Typography className="company-name">
-                          {application.company}
-                        </Typography>
-                        <Typography className="company-role">
-                          {application.role} · {application.location}
-                        </Typography>
-                      </Box>
-                    </Box>
-
-                    <Box>
-                      <Chip
-                        size="small"
-                        label={application.status}
-                        className="status-chip"
-                        sx={{
-                          color: statusStyles[application.status].color,
-                          backgroundColor: statusStyles[application.status].background,
-                        }}
-                      />
-                    </Box>
-
-                    <Typography className="date-cell">
-                      {application.date}
-                    </Typography>
-
-                    <IconButton
-                      className="row-action"
-                      aria-label={`View ${application.company}`}
-                      onClick={() =>
-                        window.alert("Application details will be added in a future step.")
-                      }
-                    >
-                      <ChevronRightRounded />
-                    </IconButton>
-                  </Box>
-                ))}
-
-                {filteredApplications.length === 0 && (
+                {loading && (
                   <Box className="empty-state">
-                    No demo applications match your search or filter.
+                    <CircularProgress size={26} />
+                    <Typography sx={{ mt: 1 }}>
+                      Loading your applications...
+                    </Typography>
+                  </Box>
+                )}
+
+                {!loading &&
+                  !error &&
+                  filteredApplications.map((application, index) => {
+                    const status = statusStyles[application.status];
+                    const initials = application.company_name
+                      .split(" ")
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((word) => word[0].toUpperCase())
+                      .join("");
+
+                    return (
+                      <Box className="table-row" key={application.id}>
+                        <Box className="company-cell">
+                          <Box
+                            className="company-logo"
+                            sx={{
+                              backgroundColor:
+                                companyColors[index % companyColors.length],
+                            }}
+                          >
+                            {initials}
+                          </Box>
+                          <Box>
+                            <Typography className="company-name">
+                              {application.company_name}
+                            </Typography>
+                            <Typography className="company-role">
+                              {application.job_title}
+                              {application.location
+                                ? ` · ${application.location}`
+                                : ""}
+                            </Typography>
+                          </Box>
+                        </Box>
+
+                        <Box>
+                          <Chip
+                            size="small"
+                            label={status.label}
+                            className="status-chip"
+                            sx={{
+                              color: status.color,
+                              backgroundColor: status.background,
+                            }}
+                          />
+                        </Box>
+
+                        <Typography className="date-cell">
+                          {formatDate(
+                            application.applied_date ||
+                              application.created_at,
+                          )}
+                        </Typography>
+
+                        <IconButton
+                          className="row-action"
+                          aria-label={`View ${application.company_name}`}
+                          onClick={() =>
+                            window.alert(
+                              `Application details for ${application.company_name} will be added in a future step.`,
+                            )
+                          }
+                        >
+                          <ChevronRightRounded />
+                        </IconButton>
+                      </Box>
+                    );
+                  })}
+
+                {!loading && !error && filteredApplications.length === 0 && (
+                  <Box className="empty-state">
+                    {applications.length === 0
+                      ? "No applications yet. Add your first application to get started."
+                      : "No applications match your search or filter."}
                   </Box>
                 )}
               </Box>
@@ -371,8 +494,11 @@ export default function Home() {
 
             <Box className="panel-footer">
               <Typography>
-                Showing {filteredApplications.length} of {demoApplications.length} demo records
+                {loading
+                  ? "Loading applications..."
+                  : `Showing ${filteredApplications.length} of ${applications.length} applications`}
               </Typography>
+
               <Button
                 className="view-all-button"
                 endIcon={<ChevronRightRounded />}
@@ -401,7 +527,9 @@ export default function Home() {
             </Paper>
 
             <Paper elevation={0} className="goal-card">
-              <Typography className="goal-label">A LITTLE PROGRESS ADDS UP</Typography>
+              <Typography className="goal-label">
+                A LITTLE PROGRESS ADDS UP
+              </Typography>
               <Typography className="goal-title">
                 Keep showing up.
               </Typography>
