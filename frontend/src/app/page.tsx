@@ -39,6 +39,7 @@ import type {
   JobApplication,
 } from "@/lib/types";
 import ApplicationFormDialog from "@/components/ApplicationFormDialog";
+import ApplicationDetailsDialog from "@/components/ApplicationDetailsDialog";
 import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
 
 const navigation = [
@@ -117,6 +118,10 @@ export default function Home() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [selectedApplication, setSelectedApplication] =
+    useState<JobApplication | null>(null);
+
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [applicationToView, setApplicationToView] =
     useState<JobApplication | null>(null);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -207,6 +212,26 @@ export default function Home() {
   function handleCloseForm() {
     setFormOpen(false);
     setSelectedApplication(null);
+  }
+
+  function handleOpenDetails(application: JobApplication) {
+    setApplicationToView(application);
+    setDetailsOpen(true);
+  }
+
+  function handleCloseDetails() {
+    setDetailsOpen(false);
+    setApplicationToView(null);
+  }
+
+  function handleEditFromDetails(application: JobApplication) {
+    handleCloseDetails();
+    handleOpenEdit(application);
+  }
+
+  function handleDeleteFromDetails(application: JobApplication) {
+    handleCloseDetails();
+    handleOpenDelete(application);
   }
 
   function handleOpenDelete(application: JobApplication) {
@@ -563,7 +588,11 @@ export default function Home() {
 
                     return (
                       <Box className="table-row" key={application.id}>
-                        <Box className="company-cell">
+                        <Box
+                          className="company-cell"
+                          onClick={() => handleOpenDetails(application)}
+                          sx={{ cursor: "pointer" }}
+                        >
                           <Box
                             className="company-logo"
                             sx={{
@@ -688,6 +717,14 @@ export default function Home() {
           </Typography>
         </Box>
       </Box>
+
+      <ApplicationDetailsDialog
+        open={detailsOpen}
+        application={applicationToView}
+        onClose={handleCloseDetails}
+        onEdit={handleEditFromDetails}
+        onDelete={handleDeleteFromDetails}
+      />
 
       {formOpen && (
         <ApplicationFormDialog
