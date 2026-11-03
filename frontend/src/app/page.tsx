@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
   Button,
@@ -17,6 +17,7 @@ import {
 } from "@mui/material";
 import {
   AddRounded,
+  DeleteOutlineRounded,
   AppsRounded,
   AssessmentRounded,
   AutoAwesomeRounded,
@@ -32,7 +33,13 @@ import {
 } from "@mui/icons-material";
 
 import { apiRequest } from "@/lib/api";
-import type { ApplicationStatus, JobApplication } from "@/lib/types";
+import type {
+  ApplicationStatus,
+  CreateJobApplication,
+  JobApplication,
+} from "@/lib/types";
+import ApplicationFormDialog from "@/components/ApplicationFormDialog";
+import DeleteConfirmationDialog from "@/components/DeleteConfirmationDialog";
 
 const navigation = [
   { label: "Dashboard", icon: DashboardRounded },
@@ -108,42 +115,140 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [formOpen, setFormOpen] = useState(false);
+  const [selectedApplication, setSelectedApplication] =
+    useState<JobApplication | null>(null);
+
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [applicationToDelete, setApplicationToDelete] =
+    useState<JobApplication | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const loadApplications = useCallback(async () => {
+    try {
+      const data = await apiRequest<JobApplication[]>(
+        "/api/applications/",
+      );
+
+      setApplications(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not load applications.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    let isActive = true;
+    let cancelled = false;
 
-    async function loadApplications() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const data = await apiRequest<JobApplication[]>(
-          "/api/applications/",
-        );
-
-        if (isActive) {
+    apiRequest<JobApplication[]>("/api/applications/")
+      .then((data) => {
+        if (!cancelled) {
           setApplications(data);
+          setError(null);
         }
-      } catch (err) {
-        if (isActive) {
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
           setError(
             err instanceof Error
               ? err.message
               : "Could not load applications.",
           );
         }
-      } finally {
-        if (isActive) {
+      })
+      .finally(() => {
+        if (!cancelled) {
           setLoading(false);
         }
-      }
-    }
-
-    loadApplications();
+      });
 
     return () => {
-      isActive = false;
+      cancelled = true;
     };
   }, []);
+
+  async function handleSaveApplication(data: CreateJobApplication) {
+    if (selectedApplication) {
+      await apiRequest<JobApplication>(
+        `/api/applications/${selectedApplication.id}/`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(data),
+        },
+      );
+    } else {
+      await apiRequest<JobApplication>("/api/applications/", {
+        method: "POST",
+        body: JSON.stringify(data),
+      });
+    }
+
+    setLoading(true);
+    await loadApplications();
+  }
+
+  function handleOpenCreate() {
+    setSelectedApplication(null);
+    setFormOpen(true);
+  }
+
+  function handleOpenEdit(application: JobApplication) {
+    setSelectedApplication(application);
+    setFormOpen(true);
+  }
+
+  function handleCloseForm() {
+    setFormOpen(false);
+    setSelectedApplication(null);
+  }
+
+  function handleOpenDelete(application: JobApplication) {
+    setApplicationToDelete(application);
+    setDeleteError(null);
+    setDeleteDialogOpen(true);
+  }
+
+  function handleCloseDelete() {
+    if (deleting) return;
+
+    setDeleteDialogOpen(false);
+    setApplicationToDelete(null);
+    setDeleteError(null);
+  }
+
+  async function handleConfirmDelete() {
+    if (!applicationToDelete) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+
+    try {
+      await apiRequest<void>(
+        `/api/applications/${applicationToDelete.id}/`,
+        { method: "DELETE" },
+      );
+
+      setDeleteDialogOpen(false);
+      setApplicationToDelete(null);
+      setLoading(true);
+      await loadApplications();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error
+          ? err.message
+          : "Could not delete the application.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const filteredApplications = useMemo(() => {
     return applications.filter((application) => {
@@ -157,7 +262,8 @@ export default function Home() {
         .includes(search.toLowerCase());
 
       const matchesStatus =
-        statusFilter === "All" || application.status === statusFilter;
+        statusFilter === "All" ||
+        application.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -173,21 +279,27 @@ export default function Home() {
     },
     {
       label: "Interviews",
-      value: applications.filter((app) => app.status === "interview").length,
+      value: applications.filter(
+        (app) => app.status === "interview",
+      ).length,
       note: "Interview opportunities",
       icon: <CalendarMonthRounded />,
       accent: "green",
     },
     {
       label: "Assessments",
-      value: applications.filter((app) => app.status === "assessment").length,
+      value: applications.filter(
+        (app) => app.status === "assessment",
+      ).length,
       note: "Pending or completed",
       icon: <AssessmentRounded />,
       accent: "amber",
     },
     {
       label: "Offers received",
-      value: applications.filter((app) => app.status === "offer").length,
+      value: applications.filter(
+        (app) => app.status === "offer",
+      ).length,
       note: "Offers tracked",
       icon: <AutoAwesomeRounded />,
       accent: "purple",
@@ -206,7 +318,9 @@ export default function Home() {
           </Typography>
         </Box>
 
-        <Typography className="nav-caption">WORKSPACE</Typography>
+        <Typography className="nav-caption">
+          WORKSPACE
+        </Typography>
 
         <Stack spacing={0.6}>
           {navigation.map(({ label, icon: Icon }) => (
@@ -221,7 +335,9 @@ export default function Home() {
             >
               {label}
               {label === "My Applications" && (
-                <span className="nav-count">{applications.length}</span>
+                <span className="nav-count">
+                  {applications.length}
+                </span>
               )}
             </Button>
           ))}
@@ -229,7 +345,9 @@ export default function Home() {
 
         <Divider className="sidebar-divider" />
 
-        <Typography className="nav-caption">TOOLS</Typography>
+        <Typography className="nav-caption">
+          TOOLS
+        </Typography>
 
         <Button
           className={`nav-item ${
@@ -278,8 +396,12 @@ export default function Home() {
           <Box className="profile">
             <Box className="avatar">AN</Box>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography className="profile-name">Your profile</Typography>
-              <Typography className="profile-caption">Job seeker</Typography>
+              <Typography className="profile-name">
+                Your profile
+              </Typography>
+              <Typography className="profile-caption">
+                Job seeker
+              </Typography>
             </Box>
             <MoreDots />
           </Box>
@@ -294,7 +416,11 @@ export default function Home() {
             </Typography>
           </Box>
 
-          <Stack direction="row" sx={{ alignItems: "center" }} spacing={1.5}>
+          <Stack
+            direction="row"
+            sx={{ alignItems: "center" }}
+            spacing={1.5}
+          >
             <TextField
               size="small"
               placeholder="Search anything..."
@@ -311,6 +437,7 @@ export default function Home() {
                 },
               }}
             />
+
             <IconButton
               className="notification-button"
               aria-label="Notifications"
@@ -339,11 +466,7 @@ export default function Home() {
               variant="contained"
               startIcon={<AddRounded />}
               className="primary-button"
-              onClick={() =>
-                window.alert(
-                  "Application form will be connected in a future step.",
-                )
-              }
+              onClick={handleOpenCreate}
             >
               Add application
             </Button>
@@ -351,9 +474,24 @@ export default function Home() {
 
           {error && (
             <Box className="demo-notice" role="alert">
-              <Typography>
-                Could not load applications: {error}
-              </Typography>
+              <Typography>{error}</Typography>
+              <Button
+                onClick={() => {
+                  setLoading(true);
+                  void loadApplications();
+                }}
+              >
+                Retry
+              </Button>
+            </Box>
+          )}
+
+          {deleteError && (
+            <Box className="demo-notice" role="alert">
+              <Typography>{deleteError}</Typography>
+              <Button onClick={() => setDeleteError(null)}>
+                Dismiss
+              </Button>
             </Box>
           )}
 
@@ -467,17 +605,23 @@ export default function Home() {
                           )}
                         </Typography>
 
-                        <IconButton
-                          className="row-action"
-                          aria-label={`View ${application.company_name}`}
-                          onClick={() =>
-                            window.alert(
-                              `Application details for ${application.company_name} will be added in a future step.`,
-                            )
-                          }
-                        >
-                          <ChevronRightRounded />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton
+                            className="row-action"
+                            aria-label={`Edit ${application.company_name}`}
+                            onClick={() => handleOpenEdit(application)}
+                          >
+                            <ChevronRightRounded />
+                          </IconButton>
+
+                          <IconButton
+                            color="error"
+                            aria-label={`Delete ${application.company_name}`}
+                            onClick={() => handleOpenDelete(application)}
+                          >
+                            <DeleteOutlineRounded />
+                          </IconButton>
+                        </Stack>
                       </Box>
                     );
                   })}
@@ -544,6 +688,24 @@ export default function Home() {
           </Typography>
         </Box>
       </Box>
+
+      {formOpen && (
+        <ApplicationFormDialog
+          key={selectedApplication?.id ?? "new"}
+          open={formOpen}
+          application={selectedApplication}
+          onClose={handleCloseForm}
+          onSubmit={handleSaveApplication}
+        />
+      )}
+
+      <DeleteConfirmationDialog
+        open={deleteDialogOpen}
+        applicationName={applicationToDelete?.company_name ?? ""}
+        deleting={deleting}
+        onClose={handleCloseDelete}
+        onConfirm={handleConfirmDelete}
+      />
     </Box>
   );
 }
@@ -565,7 +727,9 @@ function StatCard({
     <Paper elevation={0} className="stat-card">
       <Box className="stat-top">
         <Typography className="stat-label">{label}</Typography>
-        <Box className={`stat-icon stat-icon-${accent}`}>{icon}</Box>
+        <Box className={`stat-icon stat-icon-${accent}`}>
+          {icon}
+        </Box>
       </Box>
       <Typography className="stat-value">{value}</Typography>
       <Typography className="stat-note">{note}</Typography>
