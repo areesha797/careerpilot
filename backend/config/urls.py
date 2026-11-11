@@ -2,7 +2,12 @@
 from django.contrib import admin
 from django.urls import include, path
 
-from applications.auth_views import CSRFTokenView, LoginView, LogoutView
+from applications.auth_views import (
+    CSRFTokenView,
+    CurrentUserView,
+    LoginView,
+    LogoutView,
+)
 
 
 urlpatterns = [
@@ -10,5 +15,6 @@ urlpatterns = [
     path("api/auth/csrf/", CSRFTokenView.as_view(), name="api-csrf"),
     path("api/auth/login/", LoginView.as_view(), name="api-login"),
     path("api/auth/logout/", LogoutView.as_view(), name="api-logout"),
+    path("api/auth/me/", CurrentUserView.as_view(), name="api-current-user"),
     path("api/applications/", include("applications.urls")),
 ]

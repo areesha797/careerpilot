@@ -7,6 +7,16 @@ type ApiError = {
   [key: string]: unknown;
 };
 
+export class ApiRequestError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
 async function getCsrfToken(): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/api/auth/csrf/`, {
     method: "GET",
@@ -48,8 +58,10 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const errorData = (await response.json().catch(() => ({}))) as ApiError;
-    throw new Error(
+
+    throw new ApiRequestError(
       errorData.detail ?? `API request failed (${response.status}).`,
+      response.status,
     );
   }
 

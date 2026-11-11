@@ -1,7 +1,7 @@
-
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
@@ -26,13 +26,14 @@ import {
   ChevronRightRounded,
   DashboardRounded,
   FilterListRounded,
+  LogoutRounded,
   NotificationsNoneRounded,
   SearchRounded,
   SettingsOutlined,
   WorkOutlineRounded,
 } from "@mui/icons-material";
 
-import { apiRequest } from "@/lib/api";
+import { ApiRequestError, apiRequest } from "@/lib/api";
 import type {
   ApplicationStatus,
   CreateJobApplication,
@@ -85,13 +86,7 @@ const statusStyles: Record<
   },
 };
 
-const companyColors = [
-  "#b8c7ff",
-  "#b5ead7",
-  "#f4d3a1",
-  "#e8c7fa",
-  "#f2b9c8",
-];
+const companyColors = ["#b8c7ff", "#b5ead7", "#f4d3a1", "#e8c7fa", "#f2b9c8"];
 
 function formatDate(dateString: string | null) {
   if (!dateString) return "Not specified";
@@ -108,6 +103,13 @@ function formatDate(dateString: string | null) {
 }
 
 export default function Home() {
+  const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<{
+    username: string;
+  } | null>(null);
+
+  const [authLoading, setAuthLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [activeNav, setActiveNav] = useState("Dashboard");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -132,17 +134,13 @@ export default function Home() {
 
   const loadApplications = useCallback(async () => {
     try {
-      const data = await apiRequest<JobApplication[]>(
-        "/api/applications/",
-      );
+      const data = await apiRequest<JobApplication[]>("/api/applications/");
 
       setApplications(data);
       setError(null);
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Could not load applications.",
+        err instanceof Error ? err.message : "Could not load applications.",
       );
     } finally {
       setLoading(false);
@@ -152,33 +150,64 @@ export default function Home() {
   useEffect(() => {
     let cancelled = false;
 
-    apiRequest<JobApplication[]>("/api/applications/")
-      .then((data) => {
-        if (!cancelled) {
-          setApplications(data);
-          setError(null);
+    async function checkAuthentication() {
+      try {
+        const user = await apiRequest<{ username: string }>("/api/auth/me/");
+
+        if (cancelled) return;
+
+        setCurrentUser(user);
+
+        const data = await apiRequest<JobApplication[]>("/api/applications/");
+
+        if (cancelled) return;
+
+        setApplications(data);
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+
+        if (
+          err instanceof ApiRequestError &&
+          (err.status === 401 || err.status === 403)
+        ) {
+          router.replace("/login");
+          return;
         }
-      })
-      .catch((err: unknown) => {
+
+        setError(
+          err instanceof Error ? err.message : "Could not load dashboard.",
+        );
+      } finally {
         if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Could not load applications.",
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
+          setAuthLoading(false);
           setLoading(false);
         }
-      });
+      }
+    }
+
+    checkAuthentication();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [router]);
+  async function handleLogout() {
+    try {
+      await apiRequest("/api/auth/logout/", {
+        method: "POST",
+      });
 
+      router.replace("/login");
+      router.refresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not log out. Please try again.",
+      );
+    }
+  }
   async function handleSaveApplication(data: CreateJobApplication) {
     if (selectedApplication) {
       await apiRequest<JobApplication>(
@@ -255,10 +284,9 @@ export default function Home() {
     setDeleteError(null);
 
     try {
-      await apiRequest<void>(
-        `/api/applications/${applicationToDelete.id}/`,
-        { method: "DELETE" },
-      );
+      await apiRequest<void>(`/api/applications/${applicationToDelete.id}/`, {
+        method: "DELETE",
+      });
 
       setDeleteDialogOpen(false);
       setApplicationToDelete(null);
@@ -287,8 +315,7 @@ export default function Home() {
         .includes(search.toLowerCase());
 
       const matchesStatus =
-        statusFilter === "All" ||
-        application.status === statusFilter;
+        statusFilter === "All" || application.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
@@ -304,33 +331,41 @@ export default function Home() {
     },
     {
       label: "Interviews",
-      value: applications.filter(
-        (app) => app.status === "interview",
-      ).length,
+      value: applications.filter((app) => app.status === "interview").length,
       note: "Interview opportunities",
       icon: <CalendarMonthRounded />,
       accent: "green",
     },
     {
       label: "Assessments",
-      value: applications.filter(
-        (app) => app.status === "assessment",
-      ).length,
+      value: applications.filter((app) => app.status === "assessment").length,
       note: "Pending or completed",
       icon: <AssessmentRounded />,
       accent: "amber",
     },
     {
       label: "Offers received",
-      value: applications.filter(
-        (app) => app.status === "offer",
-      ).length,
+      value: applications.filter((app) => app.status === "offer").length,
       note: "Offers tracked",
       icon: <AutoAwesomeRounded />,
       accent: "purple",
     },
   ];
-
+  if (authLoading || !currentUser) {
+    return (
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0b1020",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
   return (
     <Box className="dashboard-shell">
       <Box component="aside" className="sidebar">
@@ -343,9 +378,7 @@ export default function Home() {
           </Typography>
         </Box>
 
-        <Typography className="nav-caption">
-          WORKSPACE
-        </Typography>
+        <Typography className="nav-caption">WORKSPACE</Typography>
 
         <Stack spacing={0.6}>
           {navigation.map(({ label, icon: Icon }) => (
@@ -360,9 +393,7 @@ export default function Home() {
             >
               {label}
               {label === "My Applications" && (
-                <span className="nav-count">
-                  {applications.length}
-                </span>
+                <span className="nav-count">{applications.length}</span>
               )}
             </Button>
           ))}
@@ -370,9 +401,7 @@ export default function Home() {
 
         <Divider className="sidebar-divider" />
 
-        <Typography className="nav-caption">
-          TOOLS
-        </Typography>
+        <Typography className="nav-caption">TOOLS</Typography>
 
         <Button
           className={`nav-item ${
@@ -419,16 +448,26 @@ export default function Home() {
           </Button>
 
           <Box className="profile">
-            <Box className="avatar">AN</Box>
+            <Box className="avatar">
+              {currentUser.username.slice(0, 2).toUpperCase()}
+            </Box>
+
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography className="profile-name">
-                Your profile
+                {currentUser.username}
               </Typography>
-              <Typography className="profile-caption">
-                Job seeker
-              </Typography>
+
+              <Typography className="profile-caption">Job seeker</Typography>
             </Box>
-            <MoreDots />
+
+            <IconButton
+              onClick={handleLogout}
+              aria-label="Logout"
+              title="Logout"
+              sx={{ color: "#94a3bd" }}
+            >
+              <LogoutRounded />
+            </IconButton>
           </Box>
         </Box>
       </Box>
@@ -441,11 +480,7 @@ export default function Home() {
             </Typography>
           </Box>
 
-          <Stack
-            direction="row"
-            sx={{ alignItems: "center" }}
-            spacing={1.5}
-          >
+          <Stack direction="row" sx={{ alignItems: "center" }} spacing={1.5}>
             <TextField
               size="small"
               placeholder="Search anything..."
@@ -476,9 +511,7 @@ export default function Home() {
         <Box className="page-content">
           <Box className="welcome-row">
             <Box>
-              <Typography className="eyebrow">
-                YOUR CAREER, IN FOCUS
-              </Typography>
+              <Typography className="eyebrow">YOUR CAREER, IN FOCUS</Typography>
               <Typography component="h1" className="page-title">
                 Good things take <span>progress.</span>
               </Typography>
@@ -514,9 +547,7 @@ export default function Home() {
           {deleteError && (
             <Box className="demo-notice" role="alert">
               <Typography>{deleteError}</Typography>
-              <Button onClick={() => setDeleteError(null)}>
-                Dismiss
-              </Button>
+              <Button onClick={() => setDeleteError(null)}>Dismiss</Button>
             </Box>
           )}
 
@@ -629,8 +660,7 @@ export default function Home() {
 
                         <Typography className="date-cell">
                           {formatDate(
-                            application.applied_date ||
-                              application.created_at,
+                            application.applied_date || application.created_at,
                           )}
                         </Typography>
 
@@ -703,9 +733,7 @@ export default function Home() {
               <Typography className="goal-label">
                 A LITTLE PROGRESS ADDS UP
               </Typography>
-              <Typography className="goal-title">
-                Keep showing up.
-              </Typography>
+              <Typography className="goal-title">Keep showing up.</Typography>
               <Typography className="goal-description">
                 Every application is a step toward the right opportunity.
               </Typography>
@@ -764,9 +792,7 @@ function StatCard({
     <Paper elevation={0} className="stat-card">
       <Box className="stat-top">
         <Typography className="stat-label">{label}</Typography>
-        <Box className={`stat-icon stat-icon-${accent}`}>
-          {icon}
-        </Box>
+        <Box className={`stat-icon stat-icon-${accent}`}>{icon}</Box>
       </Box>
       <Typography className="stat-value">{value}</Typography>
       <Typography className="stat-note">{note}</Typography>
@@ -774,10 +800,4 @@ function StatCard({
   );
 }
 
-function MoreDots() {
-  return (
-    <Typography className="profile-menu" aria-hidden="true">
-      ···
-    </Typography>
-  );
-}
+
