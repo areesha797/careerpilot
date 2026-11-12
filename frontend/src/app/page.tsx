@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import AnalyticsCharts from "@/components/AnalyticsCharts";
 import {
   Box,
   Button,
@@ -563,6 +564,11 @@ export default function Home() {
               />
             ))}
           </Box>
+
+          <AnalyticsCharts
+  applications={applications}
+  loading={loading}
+/>
 
           <Paper elevation={0} className="applications-panel">
             <Box className="panel-header">
