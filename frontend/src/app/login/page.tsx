@@ -1,7 +1,6 @@
-
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Alert,
@@ -28,10 +27,55 @@ type LoginResponse = {
 export default function LoginPage() {
   const router = useRouter();
 
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkAuthentication() {
+      try {
+        await apiRequest<{ username: string }>("/api/auth/me/");
+
+        if (!cancelled) {
+          router.replace("/");
+          router.refresh();
+        }
+      } catch {
+        // User is not authenticated. Show the login form.
+      } finally {
+        if (!cancelled) {
+          setCheckingAuth(false);
+        }
+      }
+    }
+
+    checkAuthentication();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  if (checkingAuth) {
+    return (
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "#0b1020",
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,7 +101,9 @@ export default function LoginPage() {
       router.refresh();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to log in. Please try again.",
+        err instanceof Error
+          ? err.message
+          : "Unable to log in. Please try again.",
       );
     } finally {
       setLoading(false);
