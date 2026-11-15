@@ -408,3 +408,76 @@ class CSRFProtectionTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["username"], "csrf_user")
         self.assertIn("_auth_user_id", self.client.session)
+
+class JobDescriptionKeywordExtractionTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="keywordtester",
+            password="testpass123",
+        )
+        self.url = "/api/keywords/extract/"
+
+    def test_unauthenticated_user_cannot_extract_keywords(self):
+        response = self.client.post(
+            self.url,
+            {"description": "Python and Django developer"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_authenticated_user_can_extract_keywords(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            self.url,
+            {
+                "description": (
+                    "We need a Python developer with Django, "
+                    "PostgreSQL, Git and React experience."
+                )
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("Python", response.data["keywords"])
+        self.assertIn("Django", response.data["keywords"])
+        self.assertIn("PostgreSQL", response.data["keywords"])
+        self.assertEqual(
+            response.data["total_keywords"],
+            len(response.data["keywords"]),
+        )
+
+    def test_empty_description_returns_bad_request(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            self.url,
+            {"description": "   "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_non_string_description_returns_bad_request(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            self.url,
+            {"description": 123},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_description_over_limit_returns_bad_request(self):
+        self.client.force_authenticate(user=self.user)
+
+        response = self.client.post(
+            self.url,
+            {"description": "A" * 20001},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

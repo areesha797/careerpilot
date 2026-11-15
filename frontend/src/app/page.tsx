@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import AnalyticsCharts from "@/components/AnalyticsCharts";
+import KeywordExtractor from "@/components/KeywordExtractor";
 import {
   Box,
   Button,
@@ -510,6 +511,10 @@ export default function Home() {
         </Box>
 
         <Box className="page-content">
+          {activeNav === "Skill Insights" ? (
+  <KeywordExtractor />
+) : (
+  <>
           <Box className="welcome-row">
             <Box>
               <Typography className="eyebrow">YOUR CAREER, IN FOCUS</Typography>
@@ -749,6 +754,8 @@ export default function Home() {
           <Typography className="page-footer">
             CareerPilot · Built to make your job search more intentional.
           </Typography>
+            </>
+)}
         </Box>
       </Box>
 

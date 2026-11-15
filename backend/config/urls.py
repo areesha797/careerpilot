@@ -1,6 +1,7 @@
 
 from django.contrib import admin
 from django.urls import include, path
+from applications.views import JobDescriptionKeywordExtractionView
 
 from applications.auth_views import (
     CSRFTokenView,
@@ -17,4 +18,9 @@ urlpatterns = [
     path("api/auth/logout/", LogoutView.as_view(), name="api-logout"),
     path("api/auth/me/", CurrentUserView.as_view(), name="api-current-user"),
     path("api/applications/", include("applications.urls")),
+    path(
+    "api/keywords/extract/",
+    JobDescriptionKeywordExtractionView.as_view(),
+    name="keyword-extraction",
+),
 ]
