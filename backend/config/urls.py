@@ -1,7 +1,10 @@
 
 from django.contrib import admin
 from django.urls import include, path
-from applications.views import JobDescriptionKeywordExtractionView
+from applications.views import (
+    JobDescriptionKeywordExtractionView,
+    SkillMatchingView,
+)
 
 from applications.auth_views import (
     CSRFTokenView,
@@ -22,5 +25,10 @@ urlpatterns = [
     "api/keywords/extract/",
     JobDescriptionKeywordExtractionView.as_view(),
     name="keyword-extraction",
+),
+   path(
+    "api/keywords/match/",
+    SkillMatchingView.as_view(),
+    name="skill-matching",
 ),
 ]

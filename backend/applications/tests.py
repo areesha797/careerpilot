@@ -481,3 +481,81 @@ class JobDescriptionKeywordExtractionTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+class SkillMatchingTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="skillmatcher",
+            password="testpass123",
+        )
+        self.url = "/api/keywords/match/"
+
+    def test_unauthenticated_user_cannot_match_skills(self):
+        response = self.client.post(
+            self.url,
+            {
+                "description": "Python Django PostgreSQL Git",
+                "skills": "Python Django React",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_authenticated_user_can_match_skills(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.url,
+            {
+                "description": "Python Django PostgreSQL Git",
+                "skills": "Python Django React",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            response.data["matched_skills"],
+            ["Python", "Django"],
+        )
+        self.assertEqual(
+           response.data["missing_skills"],
+           ["PostgreSQL", "Git"],
+       )
+        self.assertEqual(response.data["match_percentage"], 50.0)
+
+    def test_empty_skills_returns_bad_request(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.url,
+            {
+                "description": "Python Django",
+                "skills": "   ",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_empty_description_returns_bad_request(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.url,
+            {
+                "description": "   ",
+                "skills": "Python Django",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_no_recognized_required_skills_returns_zero_percentage(self):
+        self.client.force_authenticate(user=self.user)
+        response = self.client.post(
+            self.url,
+            {
+                "description": "Excellent communication and teamwork",
+                "skills": "Python Django",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["match_percentage"], 0.0)
